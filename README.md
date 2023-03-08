@@ -1,2 +1,2 @@
 # DeltaOneBcn
-Our submission to the Ready Trader Go challenge by Optiver
+Python version: 3.11
