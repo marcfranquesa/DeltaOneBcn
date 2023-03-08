@@ -1,3 +1,6 @@
+# Original RTG
+
+
 # Copyright 2021 Optiver Asia Pacific Pty. Ltd.
 #
 # This file is part of Ready Trader Go.
@@ -22,7 +25,6 @@ import subprocess
 import sys
 import time
 import traceback
-import os
 
 import ready_trader_go.exchange
 import ready_trader_go.trader
@@ -63,10 +65,19 @@ def on_error(name: str, error: Exception) -> None:
 
 def run(args) -> None:
     """Run a match."""
-    paths = [pathlib.Path(f"autotraders/{f}") for f in os.listdir("autotraders/")]
-    autotraders = [f for f in paths if f.suffix == ".py"]
-
-    for auto_trader in autotraders:
+    for auto_trader in args.autotrader:
+        if auto_trader.suffix.lower == ".py" and auto_trader.parent != pathlib.Path(
+            "."
+        ):
+            print(
+                "Python auto traders cannot be in a different directory: '%s'"
+                % auto_trader,
+                file=sys.stderr,
+            )
+            return
+        if not auto_trader.exists():
+            print("'%s' does not exist" % auto_trader, file=sys.stderr)
+            return
         if not auto_trader.with_suffix(".json").exists():
             print(
                 "'%s': configuration file is missing: %s"
@@ -74,7 +85,7 @@ def run(args) -> None:
             )
             return
 
-    with multiprocessing.Pool(len(autotraders) + 2, maxtasksperchild=1) as pool:
+    with multiprocessing.Pool(len(args.autotrader) + 2, maxtasksperchild=1) as pool:
         exchange = pool.apply_async(
             ready_trader_go.exchange.main,
             error_callback=lambda e: on_error("The exchange simulator", e),
@@ -83,11 +94,11 @@ def run(args) -> None:
         # Give the exchange simulator a chance to start up.
         time.sleep(0.5)
 
-        for path in autotraders:
+        for path in args.autotrader:
             if path.suffix.lower() == ".py":
                 pool.apply_async(
                     ready_trader_go.trader.main,
-                    (str(path.with_suffix("")),),
+                    (path.with_suffix("").name,),
                     error_callback=lambda e: on_error("Auto-trader '%s'" % path, e),
                 )
             else:
@@ -130,6 +141,12 @@ def main() -> None:
         "--port",
         default=12347,
         help="port number of the exchange simulator (default 12347)",
+    )
+    run_parser.add_argument(
+        "autotrader",
+        nargs="*",
+        type=pathlib.Path,
+        help="auto-traders to include in the match",
     )
     run_parser.set_defaults(func=run)
 
