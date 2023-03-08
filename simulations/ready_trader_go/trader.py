@@ -104,7 +104,7 @@ def main(name: str = "autotrader") -> None:
     app = Application(name, __config_validator)
 
     sys.path.insert(0, os.getcwd())
-    mod = importlib.import_module(name.replace("/", ".").replace("\\\\", "."))
+    mod = importlib.import_module(name.replace("/", ".").replace("\\", "."))
     auto_trader = mod.AutoTrader(
         app.event_loop, app.config["TeamName"], app.config["Secret"]
     )
