@@ -6,7 +6,22 @@ import time
 
 from typing import List, Tuple
 
-from ready_trader_go import BaseAutoTrader, Instrument, Lifespan, Side
+from ready_trader_go import (
+    BaseAutoTrader,
+    Instrument,
+    Lifespan,
+    MAXIMUM_ASK,
+    MINIMUM_BID,
+    Side,
+)
+
+LOT_SIZE = 10
+POSITION_LIMIT = 100
+TICK_SIZE_IN_CENTS = 100
+MIN_BID_NEAREST_TICK = (
+    (MINIMUM_BID + TICK_SIZE_IN_CENTS) // TICK_SIZE_IN_CENTS * TICK_SIZE_IN_CENTS
+)
+MAX_ASK_NEAREST_TICK = MAXIMUM_ASK // TICK_SIZE_IN_CENTS * TICK_SIZE_IN_CENTS
 
 
 class AutoTrader(BaseAutoTrader):
@@ -19,6 +34,8 @@ class AutoTrader(BaseAutoTrader):
             self.ask_price
         ) = self.bid_id = self.bid_price = self.position = self.size = 0
 
+        self.bids = set()
+        self.asks = set()
         self.tick_storage_limit = 5000
 
         self.order_volume = 1
@@ -140,6 +157,7 @@ class AutoTrader(BaseAutoTrader):
                             self.order_volume,
                             Lifespan.GOOD_FOR_DAY,
                         )
+                        self.bids.add(self.bid_id)
                         self.action_count += 1
 
                     # Determine ask volume according to current position.
@@ -164,6 +182,7 @@ class AutoTrader(BaseAutoTrader):
                             self.order_volume,
                             Lifespan.GOOD_FOR_DAY,
                         )
+                        self.asks.add(self.ask_id)
                         self.action_count += 1
 
             elif self.action_count > 14:
@@ -192,25 +211,58 @@ class AutoTrader(BaseAutoTrader):
             elif client_order_id == self.ask_id:
                 self.ask_id = 0
 
-    def on_position_change_message(
-        self, future_position: int, etf_position: int
-    ) -> None:
-        """Called when your position changes.
+            self.bids.discard(client_order_id)
+            self.asks.discard(client_order_id)
 
-        Since every trade in the ETF is automatically hedged in the future,
-        future_position and etf_position will always be the inverse of each
-        other (i.e. future_position == -1 * etf_position).
+    def on_order_filled_message(
+        self, client_order_id: int, price: int, volume: int
+    ) -> None:
+        """Called when one of your orders is filled, partially or fully.
+
+        The price is the price at which the order was (partially) filled,
+        which may be better than the order's limit price. The volume is
+        the number of lots filled at that price.
         """
-        self.position = etf_position
+        self.logger.info(
+            "received order filled for order %d with price %d and volume %d",
+            client_order_id,
+            price,
+            volume,
+        )
+        if client_order_id in self.bids:
+            self.position += volume
+            self.send_hedge_order(
+                next(self.order_ids), Side.ASK, MIN_BID_NEAREST_TICK, volume
+            )
+        elif client_order_id in self.asks:
+            self.position -= volume
+            self.send_hedge_order(
+                next(self.order_ids), Side.BID, MAX_ASK_NEAREST_TICK, volume
+            )
 
     def on_trade_ticks_message(
-        self, instrument: int, trade_ticks: List[Tuple[int, int]]
+        self,
+        instrument: int,
+        sequence_number: int,
+        ask_prices: List[int],
+        ask_volumes: List[int],
+        bid_prices: List[int],
+        bid_volumes: List[int],
     ) -> None:
-        """Called periodically to report trading activity on the market.
+        """Called periodically when there is trading activity on the market.
 
-        Each trade tick is a pair containing a price and the number of lots
-        traded at that price since the last trade ticks message.
+        The five best ask (i.e. sell) and bid (i.e. buy) prices at which there
+        has been trading activity are reported along with the aggregated volume
+        traded at each of those price levels.
+
+        If there are less than five prices on a side, then zeros will appear at
+        the end of both the prices and volumes arrays.
         """
+        self.logger.info(
+            "received trade ticks for instrument %d with sequence number %d",
+            instrument,
+            sequence_number,
+        )
 
     def ms_til_next_second(self):
         """Return number of milliseconds (expressed as seconds) until next second."""

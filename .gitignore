@@ -134,3 +134,4 @@ dmypy.json
 # extensions
 *.csv
 *.dat
+*.json

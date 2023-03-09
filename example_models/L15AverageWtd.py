@@ -174,25 +174,29 @@ class AutoTrader(BaseAutoTrader):
             elif client_order_id == self.ask_id:
                 self.ask_id = 0
 
-    def on_position_change_message(
-        self, future_position: int, etf_position: int
-    ) -> None:
-        """Called when your position changes.
-
-        Since every trade in the ETF is automatically hedged in the future,
-        future_position and etf_position will always be the inverse of each
-        other (i.e. future_position == -1 * etf_position).
-        """
-        self.position = etf_position
-
     def on_trade_ticks_message(
-        self, instrument: int, trade_ticks: List[Tuple[int, int]]
+        self,
+        instrument: int,
+        sequence_number: int,
+        ask_prices: List[int],
+        ask_volumes: List[int],
+        bid_prices: List[int],
+        bid_volumes: List[int],
     ) -> None:
-        """Called periodically to report trading activity on the market.
+        """Called periodically when there is trading activity on the market.
 
-        Each trade tick is a pair containing a price and the number of lots
-        traded at that price since the last trade ticks message.
+        The five best ask (i.e. sell) and bid (i.e. buy) prices at which there
+        has been trading activity are reported along with the aggregated volume
+        traded at each of those price levels.
+
+        If there are less than five prices on a side, then zeros will appear at
+        the end of both the prices and volumes arrays.
         """
+        self.logger.info(
+            "received trade ticks for instrument %d with sequence number %d",
+            instrument,
+            sequence_number,
+        )
 
     def ms_til_next_second(self):
         """Return number of milliseconds (expressed as seconds) until next second."""
