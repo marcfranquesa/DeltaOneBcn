@@ -40,7 +40,7 @@ alpha = 0.1
 n_sigma = 2
 
 def place_orders(data, open_lots):
-    # Calculem VWAP i stdev
+    # Calculem VWA i stdev
     vwap = (data['price'] * data['volume']).sum() / data['volume'].sum()
     std_dev = data['price'].std()
 
