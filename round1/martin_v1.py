@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+import time
 from scipy.stats import norm
 
 def calculate_optimal_spread(data, gamma=1, alpha=0.1):
@@ -11,7 +12,7 @@ def calculate_optimal_spread(data, gamma=1, alpha=0.1):
     spread = 2 * alpha * std_dev / (gamma * vwap)
     return spread
 
-import time
+
 
 def place_orders(data, open_lots, spread, gamma=1, n_sigma=2, order_count=0):
     if data.empty:
