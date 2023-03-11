@@ -39,14 +39,15 @@ gamma = 1
 alpha = 0.1
 n_sigma = 2
 
+
 def place_orders(data, open_lots):
     # Calculem VWAP i stdev
-    vwap = (data['price'] * data['volume']).sum() / data['volume'].sum()
-    std_dev = data['price'].std()
+    vwap = (data["price"] * data["volume"]).sum() / data["volume"].sum()
+    std_dev = data["price"].std()
 
     # Calculem preus i vol d optimitzacio optim
     price = vwap + alpha * np.sign(open_lots) * std_dev
-    quantity = gamma * (price - data['price'].iloc[-1]) / std_dev
+    quantity = gamma * (price - data["price"].iloc[-1]) / std_dev
 
     # Probabilitat de que una ordre sigui filled
     prob_fill = norm.cdf(n_sigma * np.abs(quantity))
@@ -55,7 +56,7 @@ def place_orders(data, open_lots):
     if open_lots == 0:
         # no lots open
         if np.random.rand() < prob_fill:
-            order = {'price': price, 'lots': np.sign(quantity)}
+            order = {"price": price, "lots": np.sign(quantity)}
         else:
             order = None
     else:
@@ -66,13 +67,13 @@ def place_orders(data, open_lots):
         elif np.abs(open_lots) > np.abs(quantity):
             # tanca la part de la posicio amb benefici
             if np.random.rand() < prob_fill:
-                order = {'price': price, 'lots': -np.sign(open_lots) * np.abs(quantity)}
+                order = {"price": price, "lots": -np.sign(open_lots) * np.abs(quantity)}
             else:
                 order = None
         else:
             # tanqca posicio sencera
             if np.random.rand() < prob_fill:
-                order = {'price': price, 'lots': -open_lots}
+                order = {"price": price, "lots": -open_lots}
             else:
                 order = None
 
