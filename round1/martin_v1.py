@@ -11,9 +11,14 @@ def calculate_optimal_spread(data, gamma=1, alpha=0.1):
     spread = 2 * alpha * std_dev / (gamma * vwap)
     return spread
 
-def place_orders(data, open_lots, spread, gamma=1, n_sigma=2):
+import time
+
+def place_orders(data, open_lots, spread, gamma=1, n_sigma=2, order_count=0):
     if data.empty:
         raise ValueError("Data cannot be empty.")
+
+    if order_count >= 10:
+        return None
 
     vwap = (data['price'] * data['volume']).sum() / data['volume'].sum()
     mid_price = vwap + spread / 2
@@ -51,4 +56,12 @@ def place_orders(data, open_lots, spread, gamma=1, n_sigma=2):
             else:
                 order = None
 
-    return order
+    if order is not None:
+        order_count += 1
+        time.sleep(0.02)  # add a delay to limit order rate
+    return order, order_count
+
+
+
+
+#%%
