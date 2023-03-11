@@ -48,12 +48,6 @@ class Application(object):
             # Signal handlers are only implemented on Unix
             pass
 
-        logging.basicConfig(
-            filename=name + ".log",
-            format="%(asctime)s [%(levelname)-7s] [%(name)s] %(message)s",
-            level=logging.INFO,
-        )
-
         self.config = None
         config_path = pathlib.Path(name + ".json")
         if config_path.exists():
@@ -65,6 +59,12 @@ class Application(object):
                 )
         elif config_validator is not None:
             raise Exception("configuration file does not exist: %s" % str(config_path))
+
+        logging.basicConfig(
+            filename=f"{name}.log",
+            format="%(asctime)s [%(levelname)-7s] [%(name)s] %(message)s",
+            level=logging.INFO,
+        )
 
         self.logger.info(
             "%s started with arguments={%s}", self.name, ", ".join(sys.argv)
