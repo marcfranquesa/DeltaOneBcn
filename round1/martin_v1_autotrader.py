@@ -41,7 +41,7 @@ class AutoTrader(BaseAutoTrader):
         self.asks = set()
         self.ask_id = self.ask_price = self.bid_id = self.bid_price = self.position = 0
 
-        self.gamma = 1
+        self.gamma = 0.01
         self.n_sigma = 2
         self.alpha = 0.1
 
@@ -96,61 +96,67 @@ class AutoTrader(BaseAutoTrader):
             instrument,
             sequence_number,
         )
-        if instrument == Instrument.ETF:
-            return
+        if instrument == Instrument.FUTURE:
+            # vwap = sum(
+            #     [i * j for i, j in zip(ask_prices + bid_prices, ask_volumes + bid_volumes)]
+            # ) / sum(ask_volumes + bid_volumes)
+            vwap = (ask_prices[0] + bid_prices[0]) / 2
 
-        # print(price_volume_sum / volume_sum)
-        vwap = sum(
-            [i * j for i, j in zip(ask_prices + bid_prices, ask_volumes + bid_volumes)]
-        ) / sum(ask_volumes + bid_volumes)
-        std = np.std(ask_prices + bid_prices)
+            std = np.std(ask_prices + bid_prices)
 
-        # Reminders: adjust T (0.5), check market volatility
-        T = 0.5
+            # Reminders: adjust T (0.5), check market volatility
+            T = 0.5
 
-        mid_price = vwap - self.position * self.gamma * std**2 * T
-        print(vwap)
-        spread = 2 * self.alpha * std / (self.gamma * vwap)
+            mid_price = vwap - self.position * self.gamma * std**2 / 100 * T
+            # print(f"{mid_price=} \n{self.position=} \n{std=} \n")
+            spread = 2 * self.alpha * std / (self.gamma * vwap)
 
-        bid_price = int(mid_price - spread / 2) // 100 * 100
-        ask_price = int(mid_price + spread / 2) // 100 * 100
-        quantity = self.gamma * (mid_price - vwap) / spread
-        quantity = quantity if quantity != 0 else 10
-        prob_fill = norm.cdf(self.n_sigma * np.abs(quantity))
+            new_bid_price = int(mid_price - spread / 2) // 100 * 100
+            new_ask_price = int(mid_price + spread / 2) // 100 * 100
+            # quantity = self.gamma * (mid_price - vwap) / spread
+            # quantity = quantity if quantity != 0 else 10
+            # prob_fill = norm.cdf(self.n_sigma * np.abs(quantity))
 
-        # Remove old bids/asks check
-        if self.bid_id != 0 and bid_price not in (self.bid_price, 0):
-            self.send_cancel_order(self.bid_id)
-            self.bid_id = 0
-        if self.ask_id != 0 and ask_price not in (self.ask_price, 0):
-            self.send_cancel_order(self.ask_id)
-            self.ask_id = 0
+            if self.bid_id != 0 and new_bid_price not in (self.bid_price, 0):
+                self.send_cancel_order(self.bid_id)
+                self.bid_id = 0
+            if self.ask_id != 0 and new_ask_price not in (self.ask_price, 0):
+                self.send_cancel_order(self.ask_id)
+                self.ask_id = 0
 
-        if self.bid_id == 0 and bid_price != 0 and self.position < POSITION_LIMIT:
-            self.logger.info(f"Bidding with {self.bid_id} bid id, {bid_price}$")
-            self.bid_id = next(self.order_ids)
-            self.bid_price = bid_price
-            self.send_insert_order(
-                self.bid_id,
-                Side.BUY,
-                bid_price,
-                LOT_SIZE,
-                Lifespan.GOOD_FOR_DAY,
-            )
-            self.bids.add(self.bid_id)
+            if (
+                self.bid_id == 0
+                and new_bid_price != 0
+                and self.position < POSITION_LIMIT - 10
+            ):
+                self.logger.info(f"Bidding with {self.bid_id} bid id, {new_bid_price}$")
+                self.bid_id = next(self.order_ids)
+                self.bid_price = new_bid_price
+                self.send_insert_order(
+                    self.bid_id,
+                    Side.BUY,
+                    new_bid_price,
+                    LOT_SIZE,
+                    Lifespan.GOOD_FOR_DAY,
+                )
+                self.bids.add(self.bid_id)
 
-        if self.ask_id == 0 and ask_price != 0 and self.position > -POSITION_LIMIT:
-            self.logger.info(f"Asking with {self.ask_id} ask id, {ask_price}$")
-            self.ask_id = next(self.order_ids)
-            self.ask_price = ask_price
-            self.send_insert_order(
-                self.ask_id,
-                Side.SELL,
-                ask_price,
-                LOT_SIZE,
-                Lifespan.GOOD_FOR_DAY,
-            )
-            self.asks.add(self.ask_id)
+            if (
+                self.ask_id == 0
+                and new_ask_price != 0
+                and self.position > -POSITION_LIMIT + 10
+            ):
+                self.logger.info(f"Asking with {self.ask_id} ask id, {new_ask_price}$")
+                self.ask_id = next(self.order_ids)
+                self.ask_price = new_ask_price
+                self.send_insert_order(
+                    self.ask_id,
+                    Side.SELL,
+                    new_ask_price,
+                    LOT_SIZE,
+                    Lifespan.GOOD_FOR_DAY,
+                )
+                self.asks.add(self.ask_id)
 
     def on_order_filled_message(
         self, client_order_id: int, price: int, volume: int
