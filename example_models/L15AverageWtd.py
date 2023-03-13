@@ -6,7 +6,23 @@ import time
 
 from typing import List, Tuple
 
-from ready_trader_go import BaseAutoTrader, Instrument, Lifespan, Side
+from ready_trader_go import (
+    BaseAutoTrader,
+    Instrument,
+    Lifespan,
+    MAXIMUM_ASK,
+    MINIMUM_BID,
+    Side,
+)
+
+
+LOT_SIZE = 10
+POSITION_LIMIT = 100
+TICK_SIZE_IN_CENTS = 100
+MIN_BID_NEAREST_TICK = (
+    (MINIMUM_BID + TICK_SIZE_IN_CENTS) // TICK_SIZE_IN_CENTS * TICK_SIZE_IN_CENTS
+)
+MAX_ASK_NEAREST_TICK = MAXIMUM_ASK // TICK_SIZE_IN_CENTS * TICK_SIZE_IN_CENTS
 
 
 class AutoTrader(BaseAutoTrader):
@@ -15,6 +31,8 @@ class AutoTrader(BaseAutoTrader):
 
         super().__init__(loop, team_name, secret)
         self.order_ids = itertools.count(1)
+        self.bids = set()
+        self.asks = set()
         self.ask_id = (
             self.ask_price
         ) = self.bid_id = self.bid_price = self.position = self.size = 0
@@ -131,6 +149,8 @@ class AutoTrader(BaseAutoTrader):
                             self.order_volume,
                             Lifespan.GOOD_FOR_DAY,
                         )
+                        self.bids.add(self.bid_id)
+
                         self.action_count += 1
 
                     # Determine ask volume according to current position.
@@ -144,6 +164,8 @@ class AutoTrader(BaseAutoTrader):
                             self.order_volume,
                             Lifespan.GOOD_FOR_DAY,
                         )
+                        self.asks.add(self.ask_id)
+
                         self.action_count += 1
 
             elif self.action_count > 14:
@@ -155,6 +177,32 @@ class AutoTrader(BaseAutoTrader):
                 if self.time_diff < 1:
                     time.sleep(1.01 - self.time_diff)
                 self.action_count = 0
+
+    def on_order_filled_message(
+        self, client_order_id: int, price: int, volume: int
+    ) -> None:
+        """Called when one of your orders is filled, partially or fully.
+
+        The price is the price at which the order was (partially) filled,
+        which may be better than the order's limit price. The volume is
+        the number of lots filled at that price.
+        """
+        self.logger.info(
+            "received order filled for order %d with price %d and volume %d",
+            client_order_id,
+            price,
+            volume,
+        )
+        if client_order_id in self.bids:
+            self.position += volume
+            self.send_hedge_order(
+                next(self.order_ids), Side.ASK, MIN_BID_NEAREST_TICK, volume
+            )
+        elif client_order_id in self.asks:
+            self.position -= volume
+            self.send_hedge_order(
+                next(self.order_ids), Side.BID, MAX_ASK_NEAREST_TICK, volume
+            )
 
     def on_order_status_message(
         self, client_order_id: int, fill_volume: int, remaining_volume: int, fees: int
@@ -173,6 +221,10 @@ class AutoTrader(BaseAutoTrader):
                 self.bid_id = 0
             elif client_order_id == self.ask_id:
                 self.ask_id = 0
+
+            # It could be either a bid or an ask
+            self.bids.discard(client_order_id)
+            self.asks.discard(client_order_id)
 
     def on_trade_ticks_message(
         self,
