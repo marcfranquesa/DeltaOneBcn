@@ -31,54 +31,42 @@ class Exchange:
         return min(self.asks.keys())
 
 class TradingBot:
-    def __init__(self, exchange, starting_balance):
-        self.exchange = exchange
-        self.balance = starting_balance
-        self.futures_position = 0
-        self.orders = []
-        self.active_orders = 0
+    def __init__(self):
+        self.active_orders = []
+        self.profit = 0
 
-    def place_order(self, price, size, is_buy=True, is_futures=False):
-        if is_buy and self.balance < price * size:
-            print("Not enough funds to place buy order.")
-            return
-        if not is_buy and not is_futures and size > self.exchange.asks.get(price, 0):
-            print("Not enough asks to fill sell order.")
-            return
-        if is_futures and abs(size) > abs(self.futures_position):
-            print("Not enough futures contracts to fill hedge order.")
+    def find_min_ask(self, market_data):
+        asks = market_data['asks']
+        if len(asks) > 0:
+            return min(asks)
+        return None
+
+    def find_closest_bid(self, market_data, price):
+        bids = market_data['bids']
+        if len(bids) > 0:
+            closest_bid = min(bids, key=lambda x: abs(x - price))
+            if closest_bid != price:
+                return closest_bid
+        return None
+
+    def process_tick(self, market_data):
+        min_ask = self.find_min_ask(market_data)
+        if min_ask is None:
             return
 
-        order = {"price": price, "size": size, "is_buy": is_buy, "is_futures": is_futures}
-        self.orders.append(order)
-        self.active_orders += 1
-        if is_futures:
-            self.futures_position += size
+        closest_bid = self.find_closest_bid(market_data, min_ask)
+        if closest_bid is None:
+            return
+
+        if len(self.active_orders) < 10:
+            sell_order = {'type': 'sell', 'price': min_ask, 'quantity': 1}
+            buy_order = {'type': 'buy', 'price': closest_bid, 'quantity': 1}
+
+            self.active_orders.append(sell_order)
+            self.active_orders.append(buy_order)
+
+            self.profit -= (min_ask - closest_bid)
+
+            print(f"New orders placed. Sell: {min_ask}, Buy: {closest_bid}")
         else:
-            self.balance -= price * size
-        print(f"Order placed: {'buy' if is_buy else 'sell'} {size} at {price}")
-
-    def cancel_order(self, order):
-        self.orders.remove(order)
-        self.active_orders -= 1
-
-    def execute_orders(self):
-        for order in self.orders[:]:
-            if order["is_futures"]:
-                if order["size"] > 0:
-                    bid = self.exchange.get_bid()
-                    if bid > order["price"]:
-                        self.exchange.place_bid(order["price"], order["size"])
-                        self.futures_position -= order["size"]
-                        self.cancel_order(order)
-                        print(f"Hedge order filled: buy {order['size']} futures contracts at {order['price']}")
-                else:
-                    ask = self.exchange.get_ask()
-                    if ask < order["price"]:
-                        self.exchange.place_ask(order["price"], abs(order["size"]))
-                        self.futures_position += abs(order["size"])
-                        self.cancel_order(order)
-                        print(f"Hedge order filled: sell {abs(order['size'])} futures contracts at {order['price']}")
-            elif order["is_buy"]:
-                if self.exchange.asks.get(order["price"], 0) >= order["size"]:
-                    self.exchange.place_ask(order["price
+            print("Max active orders reached. Cannot place new orders.")
