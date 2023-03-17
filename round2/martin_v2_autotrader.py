@@ -1,6 +1,7 @@
 import time
 import random
 
+
 class Exchange:
     def __init__(self):
         self.bids = {}
@@ -30,19 +31,20 @@ class Exchange:
     def get_ask(self):
         return min(self.asks.keys())
 
+
 class TradingBot:
     def __init__(self):
         self.active_orders = []
         self.profit = 0
 
     def find_min_ask(self, market_data):
-        asks = market_data['asks']
+        asks = market_data["asks"]
         if len(asks) > 0:
             return min(asks)
         return None
 
     def find_closest_bid(self, market_data, price):
-        bids = market_data['bids']
+        bids = market_data["bids"]
         if len(bids) > 0:
             closest_bid = min(bids, key=lambda x: abs(x - price))
             if closest_bid != price:
@@ -59,13 +61,13 @@ class TradingBot:
             return
 
         if len(self.active_orders) < 10:
-            sell_order = {'type': 'sell', 'price': min_ask, 'quantity': 1}
-            buy_order = {'type': 'buy', 'price': closest_bid, 'quantity': 1}
+            sell_order = {"type": "sell", "price": min_ask, "quantity": 1}
+            buy_order = {"type": "buy", "price": closest_bid, "quantity": 1}
 
             self.active_orders.append(sell_order)
             self.active_orders.append(buy_order)
 
-            self.profit -= (min_ask - closest_bid)
+            self.profit -= min_ask - closest_bid
 
             print(f"New orders placed. Sell: {min_ask}, Buy: {closest_bid}")
         else:
